@@ -34,10 +34,17 @@ const signup = async (req, res) => {
 
         if (user) {
             res.status(201).json({
-                _id: user._id,
-                fullName: user.fullName,
-                email: user.email,
                 token: generateToken(user._id),
+                user: {
+                    id: user._id,
+                    fullName: user.fullName,
+                    email: user.email,
+                    phoneNumber: user.phoneNumber,
+                    country: user.country,
+                    onboardingComplete: user.onboardingComplete,
+                    documentStatus: user.documentStatus,
+                    createdAt: user.createdAt,
+                }
             });
         } else {
             res.status(400).json({ message: 'Invalid user data received' });
@@ -67,10 +74,17 @@ const signin = async (req, res) => {
 
         if (user && (await user.matchPassword(password))) {
             res.json({
-                _id: user._id,
-                fullName: user.fullName,
-                email: user.email,
                 token: generateToken(user._id),
+                user: {
+                    id: user._id,
+                    fullName: user.fullName,
+                    email: user.email,
+                    phoneNumber: user.phoneNumber,
+                    country: user.country,
+                    onboardingComplete: user.onboardingComplete,
+                    documentStatus: user.documentStatus,
+                    createdAt: user.createdAt,
+                }
             });
         } else {
             res.status(401).json({ message: 'Invalid email or password' });
@@ -94,11 +108,16 @@ const logout = async (req, res) => {
 const getMe = async (req, res) => {
     // req.user is set in protect middleware
     res.status(200).json({
-        _id: req.user._id,
-        fullName: req.user.fullName,
-        email: req.user.email,
-        phoneNumber: req.user.phoneNumber,
-        country: req.user.country
+        user: {
+            id: req.user._id,
+            fullName: req.user.fullName,
+            email: req.user.email,
+            phoneNumber: req.user.phoneNumber,
+            country: req.user.country,
+            onboardingComplete: req.user.onboardingComplete,
+            documentStatus: req.user.documentStatus,
+            createdAt: req.user.createdAt,
+        }
     });
 };
 
@@ -175,6 +194,48 @@ const resetPassword = async (req, res) => {
     }
 };
 
+// @desc    Update user info (admin only)
+// @route   PATCH /api/auth/users/:id
+// @access  Private/Admin
+const updateUserByAdmin = async (req, res) => {
+    try {
+        const { documentStatus, onboardingComplete, country } = req.body;
+
+        let user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Only update fields that are provided in the request
+        if (documentStatus !== undefined) user.documentStatus = documentStatus;
+        if (onboardingComplete !== undefined) user.onboardingComplete = onboardingComplete;
+        if (country !== undefined) user.country = country;
+
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            user: {
+                id: user._id,
+                fullName: user.fullName,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                country: user.country,
+                onboardingComplete: user.onboardingComplete,
+                documentStatus: user.documentStatus,
+                createdAt: user.createdAt,
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        if (error.name === 'CastError' && error.kind === 'ObjectId') {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.status(500).json({ message: 'Server error while updating user' });
+    }
+};
+
 module.exports = {
     signup,
     signin,
@@ -182,4 +243,5 @@ module.exports = {
     getMe,
     forgotPassword,
     resetPassword,
+    updateUserByAdmin
 };

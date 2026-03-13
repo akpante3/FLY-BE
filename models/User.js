@@ -28,8 +28,26 @@ const userSchema = new mongoose.Schema(
         password: {
             type: String,
             required: [true, 'Please provide a password'],
-            minlength: 8,
+            minlength: [8, 'Password must be at least 8 characters long'],
+            match: [
+                /^(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-]).{8,}$/,
+                'Password must contain at least one number and one symbol',
+            ],
             select: false, // Don't return password by default
+        },
+        onboardingComplete: {
+            type: Boolean,
+            default: false,
+        },
+        documentStatus: {
+            type: String,
+            enum: ['pending', 'verified', 'rejected', 'none'],
+            default: 'pending',
+        },
+        role: {
+            type: String,
+            enum: ['user', 'admin'],
+            default: 'user',
         },
         resetPasswordToken: String,
         resetPasswordExpire: Date,
