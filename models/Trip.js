@@ -99,10 +99,6 @@ const tripSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
-        seatsAvailable: {
-            type: Number,
-            required: [true, 'Please provide the number of available seats'],
-        },
         isInstallmentAllowed: {
             type: Boolean,
             default: true,
@@ -113,8 +109,14 @@ const tripSchema = new mongoose.Schema(
     },
     {
         timestamps: true,
+        toJSON: { virtuals: true },
+        toObject: { virtuals: true }
     }
 );
+
+tripSchema.virtual('seatsAvailable').get(function () {
+    return this.seatsTotal - (this.bookedCount || 0);
+});
 
 const Trip = mongoose.model('Trip', tripSchema);
 
