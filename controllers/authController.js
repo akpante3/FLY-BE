@@ -236,6 +236,78 @@ const updateUserByAdmin = async (req, res) => {
     }
 };
 
+// @desc    Google auth callback
+// @route   GET /api/auth/google/callback
+// @access  Public
+const googleAuthCallback = async (req, res) => {
+    try {
+        const user = req.user;
+        const token = generateToken(user._id);
+
+        const clientUrl = process.env.FRONTEND_URL || 'https://www.flyaux.com';
+
+        let redirectUrl = `${clientUrl}/auth/callback?token=${token}`;
+
+        // If the user hasn't completed onboarding, redirect them to the onboarding page
+        if (!user.onboardingComplete) {
+            redirectUrl += '&next=/onboarding/passport';
+        }
+
+        res.redirect(redirectUrl);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error during Google authentication' });
+    }
+};
+
+// @desc    Get all users (admin only)
+// @route   GET /api/auth/users
+// @access  Private/Admin
+const listUsers = async (req, res) => {
+    try {
+        const users = await User.find({}).select('-password');
+        res.status(200).json({
+            success: true,
+            count: users.length,
+            users
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error while fetching users' });
+    }
+};
+
+// @desc    Delete multiple users (admin only)
+// @route   DELETE /api/auth/users
+// @access  Private/Admin
+const deleteUsers = async (req, res) => {
+    try {
+        const { userIds } = req.body;
+
+        if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ message: 'Please provide an array of user IDs to delete' });
+        }
+
+        // Optional: Prevent admins from deleting themselves
+        if (userIds.includes(req.user._id.toString())) {
+            return res.status(400).json({ message: 'You cannot delete your own account' });
+        }
+
+        const result = await User.deleteMany({
+            _id: { $in: userIds }
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `${result.deletedCount} user(s) deleted successfully`,
+            deletedCount: result.deletedCount
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error while deleting users' });
+    }
+};
+
 module.exports = {
     signup,
     signin,
@@ -243,5 +315,8 @@ module.exports = {
     getMe,
     forgotPassword,
     resetPassword,
-    updateUserByAdmin
+    updateUserByAdmin,
+    googleAuthCallback,
+    listUsers,
+    deleteUsers
 };

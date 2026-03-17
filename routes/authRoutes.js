@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { signup, signin, logout, getMe, forgotPassword, resetPassword, updateUserByAdmin } = require('../controllers/authController');
+const passport = require('passport');
+const { signup, signin, logout, getMe, forgotPassword, resetPassword, updateUserByAdmin, googleAuthCallback, listUsers, deleteUsers } = require('../controllers/authController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.post('/signup', signup);
@@ -9,6 +10,20 @@ router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:resettoken', resetPassword);
+
+// User management routes (Admin only)
+router.get('/users', protect, admin, listUsers);
+router.delete('/users', protect, admin, deleteUsers);
 router.patch('/users/:id', protect, admin, updateUserByAdmin);
+
+// Google OAuth routes
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google/callback',
+    (req, res, next) => {
+        const failureUrl = `${process.env.FRONTEND_URL || 'https://www.flyaux.com'}/auth/callback?error=access_denied`;
+        passport.authenticate('google', { session: false, failureRedirect: failureUrl })(req, res, next);
+    },
+    googleAuthCallback
+);
 
 module.exports = router;

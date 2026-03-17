@@ -19,21 +19,45 @@ const userSchema = new mongoose.Schema(
         },
         phoneNumber: {
             type: String,
-            required: [true, 'Please provide your phone number'],
+            required: [
+                function () {
+                    return !this.googleAuth;
+                },
+                'Please provide your phone number',
+            ],
         },
         country: {
             type: String,
-            required: [true, 'Please select your country of residence'],
+            required: [
+                function () {
+                    return !this.googleAuth;
+                },
+                'Please select your country of residence',
+            ],
         },
         password: {
             type: String,
-            required: [true, 'Please provide a password'],
+            required: [
+                function () {
+                    return !this.googleAuth;
+                },
+                'Please provide a password',
+            ],
             minlength: [8, 'Password must be at least 8 characters long'],
             match: [
                 /^(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-]).{8,}$/,
                 'Password must contain at least one number and one symbol',
             ],
             select: false, // Don't return password by default
+        },
+        googleId: {
+            type: String,
+            unique: true,
+            sparse: true,
+        },
+        googleAuth: {
+            type: Boolean,
+            default: false,
         },
         onboardingComplete: {
             type: Boolean,
@@ -59,12 +83,13 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) {
-        next();
+    if (!this.isModified('password') || !this.password) {
+        return next();
     }
 
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
 // Method to match password
