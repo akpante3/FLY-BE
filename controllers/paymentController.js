@@ -1,12 +1,14 @@
 const Booking = require('../models/Booking');
 
-// @desc    Upload receipt for an installment
+// @desc    Upload receipt (save Cloudinary URL) for an installment
 // @route   POST /api/payments/installments/:id/receipt
 // @access  Private
 const uploadReceipt = async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ message: 'Please upload a receipt file' });
+        const { receiptUrl } = req.body;
+
+        if (!receiptUrl) {
+            return res.status(400).json({ message: 'Please provide a receipt URL' });
         }
 
         // Find the booking that has this installment
@@ -23,8 +25,8 @@ const uploadReceipt = async (req, res) => {
 
         const installment = booking.installments.id(req.params.id);
 
-        // Generate URL path (e.g. static served from server)
-        installment.receiptUrl = `/uploads/receipts/${req.file.filename}`;
+        // Save Cloudinary URL
+        installment.receiptUrl = receiptUrl;
         installment.status = 'uploaded';
 
         await booking.save();
