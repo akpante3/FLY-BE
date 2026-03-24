@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const installmentSchema = new mongoose.Schema({
+    amount: { type: Number, required: true },
+    dueDate: { type: Date, required: true },
+    paymentName: { type: String, required: true },
+    status: { type: String, enum: ['pending', 'uploaded', 'paid', 'overdue'], default: 'pending' },
+    receiptUrl: { type: String },
+}, { timestamps: true });
+
 const bookingSchema = new mongoose.Schema(
     {
         user: {
@@ -35,6 +43,7 @@ const bookingSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
+        installments: [installmentSchema],
     },
     {
         timestamps: true,

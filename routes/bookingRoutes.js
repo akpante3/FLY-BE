@@ -5,7 +5,8 @@ const {
     getAllBookings,
     getMyBookings,
     getBookingById,
-    updateBookingStatus
+    updateBookingStatus,
+    getBookingInstallments
 } = require('../controllers/bookingController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -14,6 +15,8 @@ router.route('/')
     .get(protect, admin, getAllBookings);
 
 router.get('/mine', protect, getMyBookings);
+
+router.get('/:id/installments', protect, getBookingInstallments);
 
 router.route('/:id')
     .get(protect, getBookingById);

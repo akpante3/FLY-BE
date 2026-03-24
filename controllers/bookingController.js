@@ -44,14 +44,39 @@ const createBooking = async (req, res) => {
             return res.status(400).json({ message: 'You have already booked this trip' });
         }
 
-        const booking = await Booking.create({
+        const bookingData = {
             user: req.user._id,
             trip: tripId,
             paymentType,
             totalAmount: trip.price,
             status: 'pending',
             paymentStatus: 'pending',
-        });
+        };
+
+        if (paymentType === 'installment') {
+            const depositAmount = trip.price * 0.2;
+            const remainingAmount = trip.price - depositAmount;
+
+            const nextMonth = new Date();
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+            bookingData.installments = [
+                {
+                    amount: depositAmount,
+                    dueDate: new Date(), // Due now
+                    paymentName: 'Deposit',
+                    status: 'pending'
+                },
+                {
+                    amount: remainingAmount,
+                    dueDate: nextMonth,
+                    paymentName: 'Final Payment',
+                    status: 'pending'
+                }
+            ];
+        }
+
+        const booking = await Booking.create(bookingData);
 
         // Increment bookedCount on the trip
         trip.bookedCount += 1;
@@ -149,6 +174,35 @@ const getBookingById = async (req, res) => {
     }
 };
 
+// @desc    Get installments for a booking
+// @route   GET /api/bookings/:id/installments
+// @access  Private
+const getBookingInstallments = async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // Make sure the user is requesting their own booking or is an admin
+        if (booking.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized to view these installments' });
+        }
+
+        res.status(200).json({
+            success: true,
+            installments: booking.installments || []
+        });
+    } catch (error) {
+        console.error(error);
+        if (error.name === 'CastError' && error.kind === 'ObjectId') {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+        res.status(500).json({ message: 'Server error while fetching installments' });
+    }
+};
+
 // @desc    Update booking status
 // @route   PATCH /api/bookings/:id/status
 // @access  Private/Admin
@@ -217,5 +271,6 @@ module.exports = {
     getAllBookings,
     getMyBookings,
     getBookingById,
-    updateBookingStatus
+    updateBookingStatus,
+    getBookingInstallments
 };
