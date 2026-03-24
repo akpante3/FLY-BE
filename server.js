@@ -18,8 +18,10 @@ app.use(passport.initialize());
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const tripRoutes = require('./routes/tripRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
 app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripRoutes);
+app.use('/api/bookings', bookingRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');

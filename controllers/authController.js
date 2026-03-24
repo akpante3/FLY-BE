@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const sendEmail = require('../utils/email');
 
 // Generate JWT token
 const generateToken = (id) => {
@@ -33,6 +34,24 @@ const signup = async (req, res) => {
         });
 
         if (user) {
+            // Send welcome email
+            try {
+                await sendEmail({
+                    to: user.email,
+                    subject: 'Welcome to FlyAUX!',
+                    html: `
+                        <h2>Welcome to FlyAUX, ${user.fullName}!</h2>
+                        <p>We are excited to have you on board.</p>
+                        <p>With FlyAUX, your next adventure is just a few clicks away.</p>
+                        <br/>
+                        <p>Safe travels,</p>
+                        <p>The FlyAUX Team</p>
+                    `
+                });
+            } catch (err) {
+                console.error('Email could not be sent:', err);
+            }
+
             res.status(201).json({
                 token: generateToken(user._id),
                 user: {
@@ -140,18 +159,37 @@ const forgotPassword = async (req, res) => {
         await user.save({ validateBeforeSave: false });
 
         // Create reset url
-        // In a real app, this would be a full URL to your frontend's reset password page
-        const resetUrl = `http://localhost:5000/api/auth/reset-password/${resetToken}`;
+        const clientUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const resetUrl = `${clientUrl}/reset-password?token=${resetToken}`;
 
-        console.log(`Reset Password URL: \n${resetUrl}`);
+        const message = `
+            <h2>Password Reset Request</h2>
+            <p>You are receiving this email because you (or someone else) has requested the reset of a password.</p>
+            <p>Please click on the following link, or paste this into your browser to complete the process:</p>
+            <a href="${resetUrl}" target="_blank">${resetUrl}</a>
+            <br/>
+            <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>
+        `;
 
-        res.status(200).json({
-            message: 'Email sent',
-            resetToken // Returning the reset token in the response for testing purposes since we aren't actually sending an email
-        });
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: 'Password Reset Token',
+                html: message
+            });
+
+            res.status(200).json({ success: true, message: 'Email sent' });
+        } catch (err) {
+            console.error('Email could not be sent:', err);
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpire = undefined;
+            await user.save({ validateBeforeSave: false });
+
+            return res.status(500).json({ message: 'Email could not be sent' });
+        }
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Email could not be sent' });
+        res.status(500).json({ message: 'Server error during forgot password' });
     }
 };
 
@@ -181,6 +219,25 @@ const resetPassword = async (req, res) => {
         user.resetPasswordExpire = undefined;
 
         await user.save();
+
+        // Send confirmation email
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: 'Password Reset Successful',
+                html: `
+                    <h2>Password Reset Successful</h2>
+                    <p>Hello ${user.fullName},</p>
+                    <p>This is a confirmation that the password for your account has just been changed.</p>
+                    <p>If you did not make this change, please contact support immediately.</p>
+                    <br/>
+                    <p>Best regards,</p>
+                    <p>The FlyAUX Team</p>
+                `
+            });
+        } catch (err) {
+            console.error('Confirmation email could not be sent:', err);
+        }
 
         res.status(200).json({
             _id: user._id,
