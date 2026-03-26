@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const axios = require('axios');
 const sendEmail = require('../utils/email');
 
 // Generate JWT token
@@ -251,6 +252,175 @@ const resetPassword = async (req, res) => {
     }
 };
 
+// @desc    Send Email Verification OTP
+// @route   POST /api/auth/send-verification-otp
+// @access  Public
+const sendEmailVerificationOTP = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.isEmailVerified) {
+            return res.status(400).json({ message: 'Email is already verified' });
+        }
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        user.emailVerificationOTP = otp;
+        user.emailVerificationOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes from now
+
+        await user.save({ validateBeforeSave: false });
+
+        // Send Email
+        const message = `
+            <h2>Email Verification</h2>
+            <p>Your verification code is: <strong>${otp}</strong></p>
+            <p>This code will expire in 10 minutes.</p>
+        `;
+
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: 'Verify Your Email',
+                html: message
+            });
+
+            res.status(200).json({ success: true, message: 'OTP sent to your email' });
+        } catch (err) {
+            console.error('Email could not be sent:', err);
+            user.emailVerificationOTP = undefined;
+            user.emailVerificationOTPExpires = undefined;
+            await user.save({ validateBeforeSave: false });
+
+            return res.status(500).json({ message: 'Email could not be sent' });
+        }
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error while sending OTP' });
+    }
+};
+
+// @desc    Verify Email OTP
+// @route   POST /api/auth/verify-email-otp
+// @access  Public
+const verifyEmailOTP = async (req, res) => {
+    const { email, otp } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.isEmailVerified) {
+            return res.status(400).json({ message: 'Email is already verified' });
+        }
+
+        if (!user.emailVerificationOTP || user.emailVerificationOTP !== otp) {
+            return res.status(400).json({ message: 'Invalid OTP' });
+        }
+
+        if (user.emailVerificationOTPExpires < Date.now()) {
+            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+        }
+
+        // Verify user
+        user.isEmailVerified = true;
+        user.emailVerificationOTP = undefined;
+        user.emailVerificationOTPExpires = undefined;
+
+        await user.save({ validateBeforeSave: false });
+
+        res.status(200).json({ success: true, message: 'Email verified successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error while verifying OTP' });
+    }
+};
+
+// @desc    Send Phone Verification OTP (Termii)
+// @route   POST /api/auth/send-phone-otp
+// @access  Public
+const sendPhoneVerificationOTP = async (req, res) => {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+        return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    const payload = {
+        api_key: process.env.TERMII_API_KEY,
+        message_type: "NUMERIC",
+        to: phoneNumber,
+        from: process.env.TERMII_SENDER_ID || "N-Alert",
+        channel: "generic",
+        pin_attempts: 10,
+        pin_time_to_live: 10,
+        pin_length: 6,
+        pin_placeholder: "< 1234 >",
+        message_text: "Your FlyAUX verification code is < 1234 >. Valid for 10 minutes.",
+        pin_type: "NUMERIC"
+    };
+
+    try {
+        const response = await axios.post(`${process.env.TERMII_BASE_URL}/api/sms/otp/send`, payload);
+
+        res.status(200).json({
+            success: true,
+            message: 'OTP sent to phone',
+            pinId: response.data.pinId
+        });
+    } catch (error) {
+        console.error('Termii error:', error.response ? error.response.data : error.message);
+        res.status(500).json({ message: 'Failed to send phone OTP' });
+    }
+};
+
+// @desc    Verify Phone OTP (Termii)
+// @route   POST /api/auth/verify-phone-otp
+// @access  Public
+const verifyPhoneOTP = async (req, res) => {
+    const { userId, pinId, pin } = req.body;
+
+    if (!pinId || !pin) {
+        return res.status(400).json({ message: 'pinId and pin are required' });
+    }
+
+    const payload = {
+        api_key: process.env.TERMII_API_KEY,
+        pin_id: pinId,
+        pin: pin
+    };
+
+    try {
+        const response = await axios.post(`${process.env.TERMII_BASE_URL}/api/sms/otp/verify`, payload);
+
+        if (response.data.verified === true || response.data.verified === "true" || response.data.verified === "Verified") {
+            if (userId) {
+                const user = await User.findById(userId);
+                if (user) {
+                    user.isPhoneVerified = true;
+                    await user.save({ validateBeforeSave: false });
+                }
+            }
+            return res.status(200).json({ success: true, message: 'Phone verified successfully!' });
+        } else {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+        }
+    } catch (error) {
+        console.error('Termii verification error:', error.response ? error.response.data : error.message);
+        res.status(400).json({ success: false, message: 'Verification failed. OTP may be invalid.' });
+    }
+};
+
 // @desc    Update user info (admin only)
 // @route   PATCH /api/auth/users/:id
 // @access  Private/Admin
@@ -372,6 +542,10 @@ module.exports = {
     getMe,
     forgotPassword,
     resetPassword,
+    sendEmailVerificationOTP,
+    verifyEmailOTP,
+    sendPhoneVerificationOTP,
+    verifyPhoneOTP,
     updateUserByAdmin,
     googleAuthCallback,
     listUsers,
